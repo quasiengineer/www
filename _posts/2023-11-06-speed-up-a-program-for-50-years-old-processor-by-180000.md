@@ -7,8 +7,8 @@ layout: post
 
 # Introduction
 
-In the previous year, I wrote the program, running on Intel's first microprocessor - 4004, that [computes the first 255 digits of Ï](https://mark.engineer/2022/04/calculating-pi-digits-on-first-intel-microprocessor-intel-4004/) . But, unfortunately, I was not able to beat ENIAC's achievement with 2035 computed digits [^1]. So let's continue our journey. I picked the successor of 4004 - Intel's 4040. This CPU is very similar to the 4004 and extends the instruction set a bit. To make my challenge a bit more spicy, I decided to follow these rules:
-1. We should compute at least 2035 digits of Ï faster than ENIAC did. According to the original article [^2] it took 70 hours of machine running time. So our goal is 69 hours, 59 minutes, 59 seconds or fewer.
+In the previous year, I wrote the program, running on Intel's first microprocessor - 4004, that [computes the first 255 digits of π](https://mark.engineer/2022/04/calculating-pi-digits-on-first-intel-microprocessor-intel-4004/) . But, unfortunately, I was not able to beat ENIAC's achievement with 2035 computed digits [^1]. So let's continue our journey. I picked the successor of 4004 - Intel's 4040. This CPU is very similar to the 4004 and extends the instruction set a bit. To make my challenge a bit more spicy, I decided to follow these rules:
+1. We should compute at least 2035 digits of π faster than ENIAC did. According to the original article [^2] it took 70 hours of machine running time. So our goal is 69 hours, 59 minutes, 59 seconds or fewer.
 2. We can't use extra I/O ports to expand CPU restrictions. For instance, it means that I can't have any external RAM/ROM bank switchers controlled by I/O ports.
 3. It should be pure computation, with no pre-computed data tables in ROM, not even a simple multiplication table.
 4. Our code should support arbitrary values for the amount of computed digits, while this value is less than or equal to a high boundary. This restriction causes avoidance of any fine-tuning for results. The solution should be generic.
@@ -32,13 +32,13 @@ There are other changes brought by 4040, but they are not that profitable for my
 
 ## Algorithm choice
 
-Let's re-evaluate what algorithms for Ï calculation exist.
+Let's re-evaluate what algorithms for π calculation exist.
 - **Spigot algorithm** [^5]. I have already described that algorithm in my previous article. It requires keeping an array of digits in memory. The length of the array is proportional to the amount of computed digits. To have 2000+ digits, we need much more RAM.
-- [**Machin-like formulae**](https://en.wikipedia.org/wiki/Machin-like_formula). Good choice, but again memory limits us. We need to perform long arithmetic and the amount of digits for operands is comparable with the desired amount of Ï digits. Maybe it would be possible to compute 700 or 800 digits, but there is no way we can reach our target value.
-- **Improved spigot algorithm** [^6]. We don't need to keep any arrays, but we have similar considerations as for Machin-like formulas - due to computations we work with several big numbers. I was not lazy and checked how big they were - just for 255 digits of Ï, the algorithm requires 7KiB of RAM.
-- **BaileyâBorweinâPlouffe formula** [^7]. Interesting idea, but it computes Ï digits in base 16 or base 2. We need base 10.
+- [**Machin-like formulae**](https://en.wikipedia.org/wiki/Machin-like_formula). Good choice, but again memory limits us. We need to perform long arithmetic and the amount of digits for operands is comparable with the desired amount of π digits. Maybe it would be possible to compute 700 or 800 digits, but there is no way we can reach our target value.
+- **Improved spigot algorithm** [^6]. We don't need to keep any arrays, but we have similar considerations as for Machin-like formulas - due to computations we work with several big numbers. I was not lazy and checked how big they were - just for 255 digits of π, the algorithm requires 7KiB of RAM.
+- **Bailey–Borwein–Plouffe formula** [^7]. Interesting idea, but it computes π digits in base 16 or base 2. We need base 10.
 - **Plouffe's algorithm** [^8]. The original algorithm is not very practical (too slow).
-- **Fabrice Bellard's algorithm is based on the same formula for Ï** [^9]. Simple and straightforward. Not the fastest, but much better than the version of Simon Plouffe.
+- **Fabrice Bellard's algorithm is based on the same formula for π** [^9]. Simple and straightforward. Not the fastest, but much better than the version of Simon Plouffe.
 - **Xavier Gourdon's algorithm** [^10]. It's even faster than Bellard's idea, but it's more complex and requires more code to be written, which is problematic with our poor ISA and limited program size (less than 8000 instructions).
 
 From the list above, Fabrice Bellard's algorithm looks like an obvious choice, so let's research how we can write the program, based on his short paper.
@@ -72,7 +72,7 @@ Transition (2) is here just to simplify computations: we need just the fractiona
 As you can notice, this formula is not recurrent: each term in the sum is independent and can be computed separately, so we need to store just the current intermediate result. And because of modular arithmetic, the length of variables is relatively small, hence couple of dozens of bytes is enough to keep all data.
 ## Computation of the nth digit for a numerical series
 
-But the formula for Ï is not a regular fraction, it is represented as a numerical series, so we need to adapt math manipulations from above to another form - the partial sum of positive finite series. We have one more complication: $A_k$ (denominator of series) would be factorized to prime factors with multiplicity that could be more than 1.
+But the formula for π is not a regular fraction, it is represented as a numerical series, so we need to adapt math manipulations from above to another form - the partial sum of positive finite series. We have one more complication: $A_k$ (denominator of series) would be factorized to prime factors with multiplicity that could be more than 1.
 Let's declare a set of prime factors $(a_1, a_2, ...,a_m)$ that have all potential factors of $A_k$ and for some $(k, i)$ multiplicity of $a_i$ in the factorization of $A_k$ could be 0 (that particular number from the set is not a factor for particular $A_k$). Also, we introduce $v_i^{max}$ - the maximal multiplicity of $a_i$ between all factorizations of $A_k$.
 $$ S_N=\sum_{k=1}^N\frac{b_k}{A_k}, A_k=\prod_{i=1}^{m}a_i^{v_{i,k}}, 0 \leq v_{i,k} \leq v_i^{max},\:i \neq j \Rightarrow gcd(a_i,a_j)=1, v_{i,k} > 0 \Rightarrow a_i \nmid b_k $$
 Declare variables, similar to the previous chapter:
@@ -100,13 +100,13 @@ $$ v_{a_i}\left(\frac{(2N - 1)!!}{N!}\right) = v_{a_i}\left( \frac{(2N)!}{2^N \c
 We could drop $2^N$ because it's divisible only by 2. And if we examine terms of that sum, then we can see that each particular term is 0 or 1:
 $$ \lfloor \frac{2N}{a_i^t} \rfloor - 2 \lfloor \frac{N}{a_i^t} \rfloor = \lfloor \frac{N}{a_i^t} \rfloor + \lfloor \frac{N}{a_i^t} + \frac{1}{2} \rfloor - 2 \lfloor \frac{N}{a_i^t} \rfloor = \lfloor \frac{N}{a_i^t} + \frac{1}{2} \rfloor - \lfloor \frac{N}{a_i^t} \rfloor \leq 1 $$
 Because we have $L = \lfloor log_{a_i}{2N} \rfloor$, then $v_i^{max} \leq \lfloor log_{a_i}{2N} \rfloor$.
-## Find the upper limit for the partial sum of Ï series
+## Find the upper limit for the partial sum of π series
 
 The next question is what particular $N$ should we use for the partial sum to get the desired fractional digits. We can formalize our demand:
 $$ \frac{b_M}{A_M} \cdot 10^n < 1 $$
 Because we pick only fractional part, then we need to take into account terms of series, which are lower than 1 when they are multiplied by $10^n$. Let's try to solve that inequality. We would use another formula for the central binomial coefficient (it's easy to derive it from the original statement):
 $$ \left(\begin{array}{c}2n\\ n\end{array}\right)=\frac{4^n(2n-1)!!}{(2n)!!} $$
-And based on that, we can transform our Ï series term:
+And based on that, we can transform our π series term:
 $$ \frac{M \cdot 2^M}{\left(\begin{array}{c}2M\\ M\end{array}\right)} \cdot 10^n = \frac{M \cdot 2^M}{\left( \frac{4^M \cdot (2M - 1)!!}{2M!!} \right)} \cdot 10^n = \frac{M \cdot 2M!!}{2^M \cdot (2M - 1)!!} \cdot 10^n $$
 We can limit part of the fraction:
 $$ 1 < \frac{2M!!}{(2M - 1)!!} \leq M $$
@@ -150,7 +150,7 @@ const getNinePiDigits = (n) => {
 
 # Tool-stack
 
-It has been enough to have just a compiler from assembly to bytecode for the relatively simple program from [my previous article](https://mark.engineer/2022/04/calculating-pi-digits-on-first-intel-microprocessor-intel-4004/) . But from some point, it became more and more tedious to develop code. So I had to improve my dev experience and extend the [intel 40xx tool stack](https://github.com/markablov/i40xx) Â with a few more tools.
+It has been enough to have just a compiler from assembly to bytecode for the relatively simple program from [my previous article](https://mark.engineer/2022/04/calculating-pi-digits-on-first-intel-microprocessor-intel-4004/) . But from some point, it became more and more tedious to develop code. So I had to improve my dev experience and extend the [intel 40xx tool stack](https://github.com/markablov/i40xx) with a few more tools.
 ## Pre-processor
 
 I wanted to have two features:
@@ -256,10 +256,10 @@ div4x4_2:
 The compilation pipeline from source code to ROM image has 4 stages:
 1. Preprocessing. Have described that stage in the previous paragraph.
 2. Parses a source code using simple grammar and produces a list of encoded instructions with metadata (like the type of instruction or source code line number) and a list of references: if the instruction has a reference to the location of another instruction (jumps by label, for example), then we need to know that to update the reference in the final image.
-3. Unites instructions into code blocks. These blocks are not always whole functions, but they could be smaller pieces of code. Even if instructions are semantically linked (implement the same function), they could be spread into the ROM and don't have to be placed nearby. So the block is the smallest set of instructions that could be executed sequentially without a guaranteed jump (program counter change). ![]({{ site.baseurl }}/images/2023/11/code_blocks.png)
+3. Unites instructions into code blocks. These blocks are not always whole functions, but they could be smaller pieces of code. Even if instructions are semantically linked (implement the same function), they could be spread into the ROM and don't have to be placed nearby. So the block is the smallest set of instructions that could be executed sequentially without a guaranteed jump (program counter change). ![](../../../images/2023/11/code_blocks.png)
 4. Now we have a list of blocks and references between blocks. Based on that, we form superblocks - a set of blocks which has short jumps to each other. They should be considered together, because we have extra limitations for their placements, while blocks with long references are untangled and could be placed in any relative locations from each other. Unfortunately, we can't apply an algorithm that solves the classical [bin packing problem](https://en.wikipedia.org/wiki/Bin_packing_problem), because superblocks can cross ROM page boundaries, despite that they have short jumps:
 
-![]({{ site.baseurl }}/images/2023/11/rom_layout.png)
+![](../../../images/2023/11/rom_layout.png)
 That's why I chose a simple and naive way - we have a cursor, that points to the ROM location and goes forward to the end of ROM. On each iteration, I try to insert some superblock at that cursor (and increase the cursor by superblock size), and if we can't do it for any superblock, then move the cursor by 1 byte forward. Few notes:
 - Blocks with fixed locations could be placed instantly, without any extra analysis.
 - Try to fit the biggest superblock first, usually, it's harder to fit large routines.
@@ -277,7 +277,7 @@ I need a way to debug the program and its parts. It's much easier to do with pro
 - GUI started to support source maps. We want to be able to determine the source code line, based on the ROM address of currently executed instruction. Because the ROM layout is not that flat anymore, the linker should produce a source map.
 - Also I have added watchers to the GUI - you can declare variables for debug purposes, and watch how they are changing live. For instance, we can have a 2-digit number, with a lower digit in rr5, and a high digit placed in status character #0 from memory register #1. Even if it's possible to find out the value of that number with registers and RAM panels, it could be not very easy. So you can specify watcher `[71]:s0,rr5` and see the value of that number while debugging the program.
 
-[![]({{ site.baseurl }}/images/2023/11/emulator-1024x615.png)]({{ site.baseurl }}/images/2023/11/emulator.png)
+[![](../../../images/2023/11/emulator-1024x615.png)](../../../images/2023/11/emulator.png)
 # Basic assembly implementation
 
 To be honest, I underestimated the computation complexity of the task. So my first implementation was relatively dumb and had almost no optimizations. But there are still a few points to mention.
@@ -336,7 +336,7 @@ How close that code would be to target 70 hours? Very, very far. I was not able 
 
 ### "Concurrent" computations
 
-Before digging into low-level optimizations, I wanted to examine the algorithm more scrupulously. I had no huge expectations because Fabrice Bellard has a brilliant mind and chances that he missed some obvious point were low. But he solved another problem than me - to determine the *nth* digit of Ï, while I was looking for *n* digits of Ï. Maybe we can reuse some computation results before runs? In-memory memoization cache could not be large: just around 300 entries if we are using 16bit numbers as cache keys and cache values. We need to do something smarter. The key observation is that $N$ has no high limit for particular $n$. It just adds more precision, but $D$ still would be correct. So we can compute common $f_i$ for all digit positions below $n$, with $N$ computed for highest required $n$. And only specific operation for different digit positions would be $D =\left\lbrace D + \frac{(f_i \cdot 10^{digitPosition}) \bmod m}{m} \right\rbrace$.
+Before digging into low-level optimizations, I wanted to examine the algorithm more scrupulously. I had no huge expectations because Fabrice Bellard has a brilliant mind and chances that he missed some obvious point were low. But he solved another problem than me - to determine the *nth* digit of π, while I was looking for *n* digits of π. Maybe we can reuse some computation results before runs? In-memory memoization cache could not be large: just around 300 entries if we are using 16bit numbers as cache keys and cache values. We need to do something smarter. The key observation is that $N$ has no high limit for particular $n$. It just adds more precision, but $D$ still would be correct. So we can compute common $f_i$ for all digit positions below $n$, with $N$ computed for highest required $n$. And only specific operation for different digit positions would be $D =\left\lbrace D + \frac{(f_i \cdot 10^{digitPosition}) \bmod m}{m} \right\rbrace$.
 Because we still would compute $f_i$ for high $N$ at some point, then extra work would be just that unnecessary $D$ updates for low digit positions when we don't need such precision. We keep intermediate values for $D$ as fixed-precision numbers with up to 15 digits after the decimal point and they need more space to be kept - whole 16 words (8 bytes). Hence, in the best case, we can keep 160 such numbers while we need 2052 / 9 = 228 entries. It's not a big deal, because we can split computation into two intervals (0, 1026) and (1026, 2052). Of course, it would be better to run that loop just once, but memory limitations hit us again.
 Small change is required for HLL implementation:
 ```javascript
@@ -358,7 +358,7 @@ We don't keep $D$ in BCD format (for example, in that format `1234` would be rep
 ### Fast path for big primes
 
 I was still skeptical about the possibility of reaching such performance gain only with code optimizations, so I continued to investigate the basis of the algorithm. And quickly discovered that for primes bigger than $\sqrt{2N}$ we have $v^{max} = 1$. It allowed me to cut a lot of edges. $v$ for that case has a binary nature - it is either 0 or 1, but more exciting is that $v$ alternates between two states with continuous sequences. $v$ switches to 1 when $a_i | 2k-1$ and then switches back to 0 when $a_i | k$. Here is a simple visualization of alternation.
-![]({{ site.baseurl }}/images/2023/11/v_switch.png)
+![](../../../images/2023/11/v_switch.png)
 The basic HLL code would look like that:
 ```javascript
   do {
@@ -438,7 +438,7 @@ It was a good observation, but it gave me just dozens of percents as a performan
 ### Profiling
 
 Usually, when you have performance problems you want to determine bottle-necks and hot code. So I started with gathering information about typical execution profiles for heavy computation routines. It was easy enough to produce stack traces, compatible with [flamegraph](https://github.com/brendangregg/FlameGraph) tool.
-[![]({{ site.baseurl }}/images/2023/11/flamegraph_noopt-1024x158.png)]({{ site.baseurl }}/images/2023/11/flamegraph_noopt.png)
+[![](../../../images/2023/11/flamegraph_noopt-1024x158.png)](../../../images/2023/11/flamegraph_noopt.png)
 Now I have a starting point. After each optimization, I re-evaluated the profile to determine target functions, that are worth checking.
 ## Modular inversion
 
@@ -608,7 +608,7 @@ That correction would give us a rough value. But for a small modulus, it could b
 $$ \lfloor \frac{F00_{16}}{m} \rfloor \cdot m $$
 If the reduced number, even after subtracting the value from LUT is still more than `0x1000` , we can reduce it by that constant. It allows us to always have 3-word numbers after rough reduction.
 By that moment in the article, I have described all caches and tables that would be kept in RAM, so I can show you the final memory layout:
-![]({{ site.baseurl }}/images/2023/11/memory_3.png)
+![](../../../images/2023/11/memory_3.png)
 Coloring legend:
 - Green section is values for $D_n$. 114 registers.
 - Purple section - that LUT for modulus multipliers.
@@ -769,8 +769,8 @@ But with lazy reduction, we don't care anymore if the number would be higher tha
 
 ## Results on emulator
 
-After all that jiggery-pockery, the whole program finished by 69h 29m 02s and I even got the right digits for Ï. Great success. Here is one of the latest flamegraphs.
-[![]({{ site.baseurl }}/images/2023/11/flamegraph_final-1024x158.png)]({{ site.baseurl }}/images/2023/11/flamegraph_final.png)
+After all that jiggery-pockery, the whole program finished by 69h 29m 02s and I even got the right digits for π. Great success. Here is one of the latest flamegraphs.
+[![](../../../images/2023/11/flamegraph_final-1024x158.png)](../../../images/2023/11/flamegraph_final.png)
 Now it's time to run it on real hardware.
 # Hardware
 
@@ -780,7 +780,7 @@ I used almost the [same schematic](https://github.com/markablov/i4040-sbc/tree/m
 - Replace the UART interface with USB.
 
 Other than that design is almost identical: LM339 and CD40109 are used as level shifters.
-[![]({{ site.baseurl }}/images/2023/11/schematic-1024x710.png)]({{ site.baseurl }}/images/2023/11/schematic.png)
+[![](../../../images/2023/11/schematic-1024x710.png)](../../../images/2023/11/schematic.png)
 # Firmware
 
 Again, the [core of firmware](https://github.com/markablov/i4040-sbc/tree/main/firmware) has been inherited from the original i4004-sbc board, but I had to make a few corrections.
@@ -800,7 +800,7 @@ So all interaction with the PC is frozen after the `START` command with ROM dump
 # Results
 
 After fixing all issues with hardware and firmware, I was able to run i4040 programs. At first, I found out that I made a heart-breaking mistake in my calculations due to tests on the emulator - I used the wrong coefficient to compute the estimated running time, based on cycle count: `95000 cycles/sec` instead of `92500 cycles/sec` . It meant that the real running time on the real i4040 was just a bit more than the target 70 hours, so I had to return to the source code and find even trickier optimizations.
-Out of interest, I started with the smaller task: computation of the first 255 digits of Ï.
+Out of interest, I started with the smaller task: computation of the first 255 digits of π.
 ```
 [2023-10-31T12:08:05.527Z] START command has been received, RAM dump size is 8192 bytes
 [2023-10-31T13:13:08.988Z] Program has been finished
@@ -813,22 +813,22 @@ Out of interest, I started with the smaller task: computation of the first 255 d
 
 As you can see, it took 01hr 05m 03s in comparison with 03hr 31m 13s from the run of the spigot algorithm on i4004. That's not a fair comparison of any kind, because CPU frequencies have been different, and more importantly is that I spent no time on optimization in the previous project. But still was kinda curious to see that numbers.
 And finally, I started computation of 2048+ digits with ETA as a bit less than 70hrs. I have prepared an Intel 4040 CPU with a couple of tiny radiators and it successfully finished the job:
-[![]({{ site.baseurl }}/images/2023/11/final_output-1024x228.png)]({{ site.baseurl }}/images/2023/11/final_output.png)
+[![](../../../images/2023/11/final_output-1024x228.png)](../../../images/2023/11/final_output.png)
 The final time is 69h 28m 31s and my journey completes here.
 PS: The attentive reader could notice that the time from the hardware run is different from the emulator, even if the amount of executed cycles is close. It's because the clock signal, generated from stm32 timers is not 100% accurate, and the output frequency is about 740.1kHz, which is higher than the specified 740kHz. So I would say that the Intel 4040 even got overclocked.
 # References
 
-[^1]: [Brian J. Shelburne, "The ENIAC's 1949 Determination of Ï"](https://ieeexplore.ieee.org/document/5999630)Â [â©](#fnref-120-1)
-[^2]: [George W. Reitwiesner, An ENIAC Determination of Ï and e to more than 2000 Decimal Places](https://www.jstor.org/stable/2002695)Â [â©](#fnref-120-2)
-[^3]: [IntelÂ Intellec 4/Mod 40Â Microcomputer Development System Reference Manual](http://datasheets.chipdb.org/upload/wepwawet/INTELLEC%204.pdf)Â [â©](#fnref-120-3)
-[^4]: [Intel, "MCS-40 User's Manual For Logic Designers"](http://www.bitsavers.org/components/intel/MCS40/MCS-40_Users_Manual_Nov74.pdf)Â [â©](#fnref-120-11)
-[^5]: [Stanley Rabinowitz and Stan Wagon, "A Spigot Algorithm for the Digits of Ï"](https://www.maa.org/sites/default/files/pdf/pubs/amm_supplements/Monthly_Reference_12.pdf)Â [â©](#fnref-120-4)
-[^6]: [Jeremy Gibbons, "Unbounded Spigot Algorithms for the Digits of Pi "](https://www.cs.ox.ac.uk/people/jeremy.gibbons/publications/spigot.pdf)Â [â©](#fnref-120-5)
-[^7]: [David Bailey, Peter Borwein and Simon Plouffe, "On the Rapid Computation of Various Polylogarithmic Constants"](https://www.davidhbailey.com/dhbpapers/digits.pdf)Â [â©](#fnref-120-6)
-[^8]: [Simon Plouffe, "On the computation of the Ýn'th decimal digit of various transcendental numbers"](https://arxiv.org/ftp/arxiv/papers/0912/0912.0303.pdf)Â [â©](#fnref-120-7)
-[^9]: [Fabrice Bellard, "Computation of the n'th digit of pi in any base in O(n^2)"](https://bellard.org/pi/pi_n2/pi_n2.html)Â [â©](#fnref-120-8)
-[^10]: [Xavier Gourdon, "Computation of the n-th decimal digit of Ï with low memory"](http://numbers.computation.free.fr/Constants/Algorithms/nthdecimaldigit.pdf)Â [â©](#fnref-120-9)
-[^11]: [D. H. Lehmer, "Interesting Series Involving the Central Binomial Coefficient"](https://www.jstor.org/stable/2322496)Â [â©](#fnref-120-10)
-[^12]: [Donald E. Knuth, "Art of Computer Programming, Volume 2: Seminumerical Algorithms", 4.3. Multiple Precision Arithmetic](https://www.amazon.com/Art-Computer-Programming-Seminumerical-Algorithms/dp/0201896842)Â [â©](#fnref-120-12)
-[^13]: [Hwajeong Seo, Zhe Liu, Yasuyuki Nogami, Jongseok Choi, Howon Kim, "Hybrid Montgomery Reduction"](https://dl.acm.org/doi/pdf/10.1145/2890502)Â [â©](#fnref-120-13)
-[^14]: [Michael Hutter, Peter Schwabe, "Multiprecision multiplication on AVR revisited"](http://mhutter.org/papers/Hutter2014MultiprecisionMultiplicationOn.pdf)Â [â©](#fnref-120-14)
+[^1]: [Brian J. Shelburne, "The ENIAC's 1949 Determination of π"](https://ieeexplore.ieee.org/document/5999630) [↩](#fnref-120-1)
+[^2]: [George W. Reitwiesner, An ENIAC Determination of π and e to more than 2000 Decimal Places](https://www.jstor.org/stable/2002695) [↩](#fnref-120-2)
+[^3]: [Intel Intellec 4/Mod 40 Microcomputer Development System Reference Manual](http://datasheets.chipdb.org/upload/wepwawet/INTELLEC%204.pdf) [↩](#fnref-120-3)
+[^4]: [Intel, "MCS-40 User's Manual For Logic Designers"](http://www.bitsavers.org/components/intel/MCS40/MCS-40_Users_Manual_Nov74.pdf) [↩](#fnref-120-11)
+[^5]: [Stanley Rabinowitz and Stan Wagon, "A Spigot Algorithm for the Digits of π"](https://www.maa.org/sites/default/files/pdf/pubs/amm_supplements/Monthly_Reference_12.pdf) [↩](#fnref-120-4)
+[^6]: [Jeremy Gibbons, "Unbounded Spigot Algorithms for the Digits of Pi "](https://www.cs.ox.ac.uk/people/jeremy.gibbons/publications/spigot.pdf) [↩](#fnref-120-5)
+[^7]: [David Bailey, Peter Borwein and Simon Plouffe, "On the Rapid Computation of Various Polylogarithmic Constants"](https://www.davidhbailey.com/dhbpapers/digits.pdf) [↩](#fnref-120-6)
+[^8]: [Simon Plouffe, "On the computation of the ݊n'th decimal digit of various transcendental numbers"](https://arxiv.org/ftp/arxiv/papers/0912/0912.0303.pdf) [↩](#fnref-120-7)
+[^9]: [Fabrice Bellard, "Computation of the n'th digit of pi in any base in O(n^2)"](https://bellard.org/pi/pi_n2/pi_n2.html) [↩](#fnref-120-8)
+[^10]: [Xavier Gourdon, "Computation of the n-th decimal digit of π with low memory"](http://numbers.computation.free.fr/Constants/Algorithms/nthdecimaldigit.pdf) [↩](#fnref-120-9)
+[^11]: [D. H. Lehmer, "Interesting Series Involving the Central Binomial Coefficient"](https://www.jstor.org/stable/2322496) [↩](#fnref-120-10)
+[^12]: [Donald E. Knuth, "Art of Computer Programming, Volume 2: Seminumerical Algorithms", 4.3. Multiple Precision Arithmetic](https://www.amazon.com/Art-Computer-Programming-Seminumerical-Algorithms/dp/0201896842) [↩](#fnref-120-12)
+[^13]: [Hwajeong Seo, Zhe Liu, Yasuyuki Nogami, Jongseok Choi, Howon Kim, "Hybrid Montgomery Reduction"](https://dl.acm.org/doi/pdf/10.1145/2890502) [↩](#fnref-120-13)
+[^14]: [Michael Hutter, Peter Schwabe, "Multiprecision multiplication on AVR revisited"](http://mhutter.org/papers/Hutter2014MultiprecisionMultiplicationOn.pdf) [↩](#fnref-120-14)
