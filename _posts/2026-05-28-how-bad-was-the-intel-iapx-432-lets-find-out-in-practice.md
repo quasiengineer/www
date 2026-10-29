@@ -6,20 +6,31 @@ layout: post
 ---
 
 Back in the 80s there was such processor - the Intel iAPX 432. It was developed as a successor to the 8080 and initially even carried the codename 8800. Intel packed an enormous amount into it - a completely new architecture, nothing like its predecessors, and even some OS concepts baked right into silicon - support for object-oriented programming, garbage collection, a process scheduler, asynchronous communications, multiple levels of fault tolerance, and much more.
+
 But due to its complexity, the architecture failed. There are several post-mortems describing the problems and the reasons for the failure, but the short version is that the technology of the time severely limited how complex a physical chip could be. Intel made a number of compromises that badly hurt performance. The CPU had to be split across two chips, since fitting all the logic into one wasn't possible. And even that wasn't enough to include all the features they wanted - even something as useful as a register file.
+
 I am not kidding - the iAPX 432 had exactly one indirectly accessible general-purpose register (a 16-bit top-of-stack), and every other variable access went through memory. On top of that, the system was positioned by Intel as capability-based, which meant data access was far more complex than simply reading or writing a value at a specific address. I'll come back to this, but the decision made the architecture's problems considerably worse.
+
 There were a few other questionable design choices, some of which were revised in later revisions. The changes were quite sweeping and partially fixed the iAPX 432's issues, but by then the train had already left the station and the market buried Intel's innovative brainchild.
+
 Fortunately, the company had a Plan B. While the brightest minds were focused on the breakthrough system, another team was working on a stopgap - the 8086, which was supposed to cover people's immediate needs. The "temporary" x86 architecture ended up dominating for several decades, while the iAPX 432 lives on only in the memory of computer enthusiasts. Yeah, that's how it goes.
+
 I enjoy poking around with old processors, so there was no way I was going to pass up the chance to run something on this peculiar thing. What made it even more interesting was that, as far as I know, nobody had touched a working 432 system in the past couple of decades.
+
 ## Hardware
 
 The processor (a.k.a. GDP, general data processor) came to me as part of an iSBC 432/100 board. It's a single board computer with a Multibus interface, intended for use with the Intel Intellec MDS. But of course, I wanted much more control over the processor's signals and a friendlier interface to work with. So I did what I usually do - designed a simple board with an FPGA and SRAM on board, which would cover everything the processor needs.
+
 <figure class="wp-block-image"><img alt="my design of SBC" class="aligncenter size-full wp-image-179" height="1857" src="../../../images/2026/05/01.png" width="1943"/></figure>
 
 Besides power, I needed to take care of signal level translation (a lot of chips back then ran on 5V). And that's pretty much it - the board is quite simple and routed on just 2 layers.
+
 A couple of noteworthy details. I put a TPS63002 on there to convert the floating voltage from the USB connector into a stable 5V, but it didn't last very long. Either it's not suited for this kind of use, or there's a mistake somewhere on my end.
+
 The second feature of the board is sharing a single connector for both flashing the SPI flash with the FPGA bitstream and for UART communication with the host. Normally I'd put a UART-USB bridge on there, so the USB connection handles both power and the communication channel. But in this case I played it safe - my PC can't deliver decent current through USB 2.0, and according to the spec the iAPX 432 can be quite power-hungry, so the USB cable is connected to a power supply instead. At the same time I didn't want a bundle of wires hanging off it, so I combined the two functions into one connector.
+
 To bring the ft232h back into UART mode after it's been used to flash the chip, all you need to do is restart the kernel module:
+
 ```
 sudo modprobe -r ftdi_sio
 sudo modprobe ftdi_sio
@@ -28,25 +39,37 @@ sudo modprobe ftdi_sio
 ## Gateware
 
 For the FPGA I went with a Lattice iCE40HX, mainly because of the open-source toolchain for synthesizing bitstreams. I picked the specific chip based on having a solderable package and enough pins.
+
 For memory I chose a synchronous parallel SRAM rated at 250MHz (access time was specified at 2.6ns). I wasn't able to hit the maximum clock speed here (even though the same combination worked at 250MHz in another project), but 125MHz turned out to be more than enough to respond to the processor within a single cycle (without introducing extra wait states), so I didn't bother hunting for the right timings to push it higher.
+
 <figure class="wp-block-image"><img alt="debugging bus transactions" class="aligncenter size-full wp-image-180" height="1920" src="../../../images/2026/05/02-scaled.jpg" width="2560"/></figure>
 
 In my design the FPGA acted as the memory controller (bus slave), clock generator for the iAPX 432 (it needs 3 clock signals), and communicated with the control software running on the PC. For debugging purposes I wanted a log of all memory accesses from the GDP, to study the logic of its operation.
+
 On the Verilog side, the only real problem was trying to get the SRAM running at 250MHz. Yosys (the synthesis tool) kept inserting SB_DFFE elements (D flip-flops with a Clock Enable input) that completely blew the timing budget (and at 250MHz that budget isn't very generous). In the end I put together a clean module that synthesized successfully and even worked - at lower frequencies - but unfortunately not at 250MHz in the current topology.
+
 <figure class="wp-block-image"><img alt="bus read timings" class="aligncenter size-full wp-image-181" height="1407" src="../../../images/2026/05/03.png" width="2130"/></figure>
 
 The bus has a pretty straightforward interface. The only thing worth mentioning is that at almost any moment a signal can arrive indicating that someone has initiated an IPC message (inter-processor communication).
+
 The request packet from the bus master (GDP) is 32 bits - 24 bits of address and 8 bits describing what the processor wants.
+
 <figure class="wp-block-image"><img alt="specification field for bus operation" class="aligncenter size-full wp-image-182" height="1152" src="../../../images/2026/05/04.png" width="2130"/></figure>
 
 The most obvious field is the operation type - read or write. The length is self-explanatory too. The modifiers are mostly informational and don't affect the behavior of my memory controller. The Access bit is a bit more interesting - the 432 operates with two address spaces: regular device memory and external registers for inter-processor communication (that's where things like the device ID live). Since we have no Interface Processor (another processor from 432 family to manage communications between 432 system and more classic environment) in our system, we'll mostly be using just the regular memory space.
+
 The last flag (RMW) is also quite neat. It provides bus-level atomicity - short for Read-Modify-Write. A read with the RMW flag locks the memory at that address - until a write command arrives (or a timeout expires), all other reads to that address will hang without a response. In my simplified system with a single GDP and a passive slave memory controller there aren't going to be any competing memory requests anyway, so we can skip implementing the logic for this feature.
+
 ## Getting the processor ready to start
 
 I haven't mentioned this before, but you can't build a functional system with just 432-family processors. Due to its object-oriented nature, the iAPX 432 expects someone to have already set up a bunch of structures in memory. There always has to be some attached processor (like 8080 or even 8086) that handles memory preparation and send initialization signal to the main actors in the distributed 432 system. Before it can execute any user code, the 432 processor goes through a whole lot of activity reading system objects - the segment object tables, processor info (registers in that inter-processor space and structures in regular memory), the current process, code and data segments, and so on.
+
 So we need to build a memory snapshot and load it into the SRAM before starting the processor.
+
 After the INIT/ signal is asserted, the GDP starts hammering out read requests for inter-processor register 0x02. This register holds the IPC status - whether there's an external message waiting to be handled. If an IPC arrives, the processor kicks off its full wake-up sequence. In theory, memory can be shared between multiple devices, so you can't rely on hardcoded absolute addresses for reading the various system structures. Only one address is baked into the microcode - the address of the global object directory. The processor uses its device ID (obtained by reading register 0x00) as an index into this global table to read a Processor object.
+
 From there it starts fetching the addresses of objects specific to that particular processor. Before executing the first user instruction, the GDP performs around 150 memory operations. And we need to be able to respond to all of those correctly.
+
 <details><summary>Access log example</summary>
 <pre>[+] Connected to SBC
 [+] SBC is online
@@ -260,9 +283,11 @@ From there it starts fetching the addresses of objects specific to that particul
 </details>
 
 Here's a rough visualization of the object hierarchy that makes up the minimal set needed to run our code.
+
 <figure class="wp-block-image"><img alt="object graph, required to run any user code" class="aligncenter size-full wp-image-183" height="1485" src="../../../images/2026/05/05-scaled.png" width="2560"/></figure>
 
 Here is a code that builds necessary objects:
+
 ```javascript
   const processorObjectTable = new ObjectTable('objectTableProcessor');
   // empty, would not be used
@@ -306,40 +331,60 @@ Here is a code that builds necessary objects:
 ```
 
 Rather than walk through every single memory access, I'll take a high-level approach and just cover the interesting bits and quirks of the iAPX 432.
+
 First, let's talk about how object pointer translation to physical addresses works. Every pointer consists of two parts - an object table index and an index of the object within that table. So to compute a physical address, the processor first has to find the table's address (by reading the central directory, which holds the addresses of the individual tables), and only then reads the descriptor from that table, which contains the physical address.
+
 <figure class="wp-block-image"><img alt="two-level pointers" class="aligncenter size-full wp-image-185" height="1027" src="../../../images/2026/05/06.png" width="1474"/></figure>
 
 Why so complex? Because several features needed to be implemented:
+
 1. Every pointer, in addition to the address, carries the access rights that pointer holds - whether it can be used for reading, writing, etc. The set of available rights depends on the object type: if a pointer to Processor object can permit high-level operations like sending a message to the processor or querying its cycle counter (that info doesn't live in regular memory). A Process object has its own set of rights. So the object type has to be checked regularly (it's a field in the descriptor).
 2. Garbage collection. It was still the 80s, so many GC concepts of the time were fairly naive. And cramming complex algorithms into the severely constrained microcode space wasn't easy either. So memory management isn't all that complicated here. Nesting level could be assigned to an object. When a "function" (of course in 432 terms this is called something entirely different, but I'm simplifying) finishes executing and returns to the caller, the processor frees all objects matching that function's nesting level. The descriptor also contains a flag indicating whether the object is currently in use by anyone.
 
 On top of that, the descriptor stores various housekeeping metadata (I'm not sure whether the GDP itself uses it or whether it's meant for external systems): flags for whether the object was accessed, whether it was written to, whether it contains any data or is all zeros, and so on. If the processor doesn't actually need any of this, than it is an additional source of performance drag - those fields get synchronized as execution proceeds, which means extra memory accesses.
+
 By the way, if you look at the code, you'll notice that some objects have two segments - Data and Access. For example, `ProcessorDataSegment` / `ProcessorAccessSegment` . What's that about? It's one of Intel's more controversial decisions (later reversed in the third revision of the iAPX 432). An object is split into 2 parts - the access segment holds only pointers, while the data segment holds everything else. This means that when working with a system object, the processor typically ends up touching 2 physical segments. Rarely does any operation need only pointers or only scalar fields. This doubles the number of memory accesses, since reading data from a segment requires a two-step journey through the object table address lookup and then the table entries themselves. And on top of that there may be housekeeping data to write back as well. No wonder Intel ended up with such a sluggish processor...
+
 Not all, but many objects can be locked - either by hardware or programmatically (via the `LOCK OBJECT` instruction). The implementation is fairly straightforward - the data segment of the object has a field containing lock metadata: the lock type and the identifier of whoever is holding it. Also a fascinating concept in a 50-year-old processor, but what would you say about hardware-level message queues with priority support, TTL, non-blocking operations, and a bunch of other bells and whistles?
+
 This mechanism is used not only for passing messages between different processes running on the GDP, but also by the scheduler itself. There's a set of processors and a set of processes. The scheduler is responsible for finding a process to run on a given processor. Message queues are used for this. Processors act as consumers, processes are the messages, and various sources - both internal and external - can publish messages to the queue.
+
 <figure class="wp-block-image"><img alt="queues and how they are used for process scheduling" class="aligncenter size-full wp-image-186" height="1069" src="../../../images/2026/05/07.png" width="1402"/></figure>
 
 There are actually several such queues (just like in a modern Linux kernel, but in hardware) - for normal tasks, reconfiguration tasks, urgent processes, and diagnostic ones. There's even a queue for sleeping processes that are supposed to wake up at a specific time (the scheduler just moves them back into the normal process queue). And the queue can be either FIFO or priority-based. I'll be honest - I didn't experiment much in this area. With only single process running on single processor in my system, a lot of this I know only in theory rather than from hands-on experience. The one thing I did bump into was the scheduler trying to kick in after the process's time quantum expired, which I didn't want. I had to cheat by running the processor's tick counter clock at a very low frequency - the iAPX 43202 needs a separate clock signal for its internal purposes, which can be arbitrary and is used purely by the scheduler.
+
 To sum up: to run a user program you need to prepare an initial directory containing the object table addresses, the tables themselves, and define a number of core objects - the processor (which actually consists of several linked segments), a process, queues, messages in those queues, and code/data segments. That's quite a bit, but by using the memory access log you can figure out which fields are actually critical to the processor and only fill in those, ignoring a chunk of the architectural complexity.
+
 ## Organizing user code and data
 
 A process's executable code is spread across several Context objects. Think of them as functions - or more accurately, procedures. A context is made up of code segments (Instruction objects) and 4 lists of data segments (those lists are called "entry access segments", EAS). Code can only access variables that live in segments defined in the EASes. This is how isolation is achieved - to access data from another context, you have to call the appropriate instruction that imports an EAS from that context (assuming the rights allow it, of course).
+
 <figure class="wp-block-image"><img alt="context and its entry access segments" class="aligncenter size-full wp-image-187" height="721" src="../../../images/2026/05/08.png" width="1201"/></figure>
 
 Calling a procedure (context) is an expensive operation. The iAPX 432 needs to prepare a bunch of objects describing the context (not just the corresponding data and access segments, but also the stack segment, for example), which takes around 20-30 memory accesses. This is, incidentally, one of the bottlenecks in Ada programs written for this system. The compiler distributed code quite suboptimally - the ISA has instructions for transferring control to code residing inside a context, so it wasn't always sensible to create a new context and pay the heavy price of a subroutine call.
+
 In my low-level code I use just one context and one code segment (I didn't write any large programs - everything fit comfortably within 64KB). One data segment was also sufficient (plus the stack), although an EAS can hold 16384 references, which allows addressing 4 * 16k * 64kb = 4GB. Not bad for a chip from the 80s.
+
 Since I wanted to explore the raw performance of the system, I planned to write code in "assembly" rather than trying to coax decent output from Ada compilers. Which means you need to understand the 432's programming architecture before writing your programs and the compiler to translate them into machine code.
+
 I've already mentioned some things - no accessible registers except a single 16-bit top-of-stack, and a stack that (interestingly) grows upward rather than downward like ARM or x86. There are no familiar PUSH/POP instructions either - the GDP modifies the stack pointer itself whenever an instruction references data from the stack.
+
 The processor supports various operand types - both regular integers (up to 32 bits!) and floating-point numbers (the iAPX 432 was one of the first to support the floating-point format that would later be standardized in the IEEE 754 spec). And of course there are instructions for working with various objects: system-level (like the `LOCK OBJECT` mentioned earlier) and user-defined.
+
 The machine code format doesn't support encoding immediate values, which means most operands are references to values in memory. So how does variable addressing work? It's not simple, unfortunately - every reference consists of two parts: a selector for the data segment containing the variable, and an offset within that segment. In its simplest form, the selector is encoded as an EAS index in the context (one of the 4) and an index of the pointer to the target segment. So even the most trivial use of a constant in code turns into multiple memory accesses. "Efficiency". There's also indirect segment addressing - where we take a selector from the machine code, compute the address of a memory cell, which in turn contains another selector that finally points to the segment holding our variable.
+
 <figure class="wp-block-image"><img alt="overcomplicated access to variables" class="aligncenter size-full wp-image-188" height="883" src="../../../images/2026/05/09.png" width="1057"/></figure>
 
 The variable's offset within the data segment can also be more complex than just a number. A basic example - accessing an array element by an index that is itself a variable. That's supported.
+
 As you can see, nothing extraordinary - we can go ahead and start writing a simple compiler. But I had performance in mind from the start and took a few optimization steps upfront. First and foremost, you want to make maximum use of the single register, and when that's not possible, go for the simplest addressing modes with the fewest memory reads.
+
 Another important consideration when writing the assembler is that the machine code uses a variable-length instruction format, and the instructions aren't even byte-aligned! An instruction can be encoded in as (6!) bits or for instance as two hundred (200!). From a programming standpoint this matters because shorter instructions mean more compact code and fewer memory accesses when the processor fetches it.
+
 ## Programs for the iAPX 432
 
 As always, let's start with Hello World. But how do we actually get output to the screen? We have an FPGA sitting on the bus with the GDP, but how do we detect the processor's command to send text to the console? The standard way is to initiate IPC via the "BROADCAST TO PROCESSORS" or "SEND TO PROCESSOR" instructions, but then we'd need to emulate another processor in the system for the GDP to send that IPC message to. Luckily there's an easier way - the "MOVE TO INTERCONNECT" instruction simply writes a value to an inter-processor register, without requiring any complex pre-built structures in memory. It's literally just one bus transaction, and the FPGA can intercept a write to a specific address (the GDP only uses 0x0 and 0x02) and forward the data over UART to our PC.
+
 ```python
 .stack {
   size = 0x10
@@ -364,12 +409,17 @@ sendTwoChars:
 ```
 
 The code is trivial even for people unfamiliar with the iAPX 432. Let me just clarify a couple of things.
+
 I introduced the pseudo-variable $data specifically to optimize code size. Addressing a variable from the start of the segment lets us avoid encoding the array's base offset. Using `msg[msgIdx]` instead would add an extra 7 bits to encode 0x02 (the offset of the msg variable in the data segment). In this case it's penny-pinching, but I wanted to show a concrete example.
+
 You'll also notice that a conditional branch takes 2 instructions - first we compare the variable to zero and write the comparison result into another variable (in this case the stack, specifically the top-of-stack register), then we branch based on the value of that result.
+
 <figure class="wp-block-image"><img alt="successful hello world" class="aligncenter size-full wp-image-189" height="653" src="../../../images/2026/05/10.png" width="1467"/></figure>
 
 `BRANCH_TRUE msgIdx sendTwoChars` would not work because `BRANCH_TRUE` operates on 8-bit values and `msgIdx` is 16 bits. It's not that the iAPX 432 checks the width - it's just basic arithmetic: casting a 16-bit value to 8-bit drops information and breaks the logic. We definitely don't want an early exit at `msgIdx = 0x100` :)
+
 Now we finally get to the reason all this was started - writing a benchmark. As usual I went with a Pi digit computation. Specifically, the spigot algorithm. It's extremely simple to implement but does a good job of exercising ALU performance.
+
 ```python
 .stack {
   size = 0x20
@@ -473,6 +523,7 @@ check_done:
 ```
 
 Again, the listing shouldn't raise too many questions, especially with the manual stack tracing. But let me point out a few things.
+
 - You can see clearly that the iAPX 432 has absolutely no control over how scalar values are used. Despite all its object-orientedness, the GDP lets you treat ints as shorts. Or even use them as arrays (have a look at `c9[digitFromCarry]`).
 - The only way I found to decrease the stack pointer without an extra memory access is: `BRANCH_TRUE $st0 main_loop`.
 - And one last thing - division and remainder are two separate operations, unlike in other architectures.
@@ -482,11 +533,17 @@ Again, the listing shouldn't raise too many questions, especially with the manua
 <figure class="wp-block-image"><img alt="comparision table with other CPUs" class="aligncenter size-full wp-image-190" height="1502" src="../../../images/2026/05/11-scaled.png" width="2560"/></figure>
 
 At this point, the iAPX 432 has taken first place in my performance chart. It even turned out to be faster than the Intel 8080, which was computing Pi using the considerably faster and more sophisticated Chudnovsky algorithm.
+
 Though it's not entirely fair to compare processors from different generations. What about a contemporary - the 8086? Unfortunately my 8086 system is currently out of order, but I used a cycle-accurate emulator - 86Box. And it turns out the iAPX 432 is on average 2.5x faster!
+
 How is that possible? A few factors played into it - I deliberately avoided many of the performance pitfalls induced by the Ada compiler. Also, while the ALU in the iAPX 432 is 16-bit, its performance on both 16-bit and 32-bit operations is still higher than the 8086's. Another possible factor is that I have no extra wait cycles for memory access since it's fast enough - though in the emulator I also tried to pick a system with similar characteristics, so that factor is probably negligible.
+
 I can't say I enjoyed programming for the iAPX 432, but the journey to getting my own code running on this machine was genuinely satisfying.
+
 All necessary stuff to replicate my work is hosted in my [github repo](https://github.com/quasiengineer/iapx432-sbc)
+
 You also can find more information about iAPX 432 in my youtube videos (they are a bit more technical and dive deeper than this article):
+
 <figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">
 <div class="wp-block-embed__wrapper"><iframe allowfullscreen="allowfullscreen" frameborder="0" height="563" src="https://www.youtube.com/embed/krHs7h7xZIY?feature=oembed" width="1000"></iframe></div>
 </figure>

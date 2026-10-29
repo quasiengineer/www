@@ -12,7 +12,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
   <script>
     document.addEventListener("DOMContentLoaded", function () {
-      renderMathInElement(document.body, {delimiters: [{left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}], throwOnError: false});
+      renderMathInElement(document.body, {delimiters: [{left: "\\[", right: "\\]", display: true}, {left: "$$", right: "$$", display: true}, {left: "$", right: "$", display: false}, {left: "\\(", right: "\\)", display: false}], throwOnError: false});
     });
   </script>
 
@@ -31,9 +31,19 @@
            font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace; font-size:.9em; }
     pre { background:var(--code-bg); padding:1rem; overflow:auto; border-radius:6px; line-height:1.45; }
     pre code { background:none; padding:0; }
+    /* Rouge syntax-highlight token colors (code blocks) */
+    pre .c, pre .cm, pre .c1, pre .sr, pre .cs { color:#6a737d; }
+    pre .k, pre .kc, pre .kd, pre .kn, pre .kp, pre .kr, pre .kt, pre .ow { color:#cf222e; }
+    pre .s, pre .s1, pre .s2, pre .se, pre .si, pre .sb, pre .sc, pre .sd { color:#032f62; }
+    pre .m, pre .mi, pre .mf, pre .mh, pre .mo, pre .il { color:#005cc5; }
+    pre .nf, pre .nc, pre .nn, pre .nx { color:#8250df; }
+    pre .nb, pre .bp, pre .vc, pre .vg, pre .vi, pre .vl { color:#005cc5; }
+    pre .cp, pre .cpf { color:#005cc5; }
+    pre .na { color:#95d80b; }
+    pre .o, pre .p { color:#24292e; }
     h1,h2,h3 { line-height:1.25; margin-top:1.8em; margin-bottom:.6em; }
     blockquote { border-left:4px solid var(--border); margin-left:0; padding-left:1rem; color:var(--muted); }
-    img { max-width:100%; height:auto; }
+    img { max-width:100%; height:auto; display:block; margin:1.5em auto; }
     table { border-collapse: collapse; }
     .post-meta { color:var(--muted); font-size:.9rem; margin-bottom:1.5rem; }
     .footnotes { font-size:.9rem; color:var(--muted); border-top:1px solid var(--border); margin-top:2rem; padding-top:1rem; }
