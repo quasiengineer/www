@@ -3,6 +3,8 @@ title: "How bad was the Intel iAPX 432 - let's find out in practice"
 date: 2026-05-28 08:10:03
 slug: how-bad-was-the-intel-iapx-432-lets-find-out-in-practice
 layout: post
+image: images/2026/05/00.jpg
+description: "Back in the 80s there was such a processor - the Intel iAPX 432: a completely new architecture, with even some OS concepts baked right into silicon."
 ---
 
 Back in the 80s there was such processor - the Intel iAPX 432. It was developed as a successor to the 8080 and initially even carried the codename 8800. Intel packed an enormous amount into it - a completely new architecture, nothing like its predecessors, and even some OS concepts baked right into silicon - support for object-oriented programming, garbage collection, a process scheduler, asynchronous communications, multiple levels of fault tolerance, and much more.

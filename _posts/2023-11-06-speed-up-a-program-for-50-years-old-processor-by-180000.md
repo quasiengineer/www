@@ -3,6 +3,8 @@ title: "Speed up a program for the 50 years old processor by 180000%"
 date: 2023-11-06 10:24:54
 slug: speed-up-a-program-for-50-years-old-processor-by-180000
 layout: post
+image: images/2023/11/board-rotated.jpg
+description: "In the previous year I wrote a program, running on Intel's first microprocessor - 4004, that computes the first 255 digits of π. So let's continue our journey with the successor - the Intel 4040."
 ---
 
 # Introduction

@@ -3,13 +3,17 @@ layout: default
 permalink: /
 title: Posts
 ---
-# Posts
-
-<ul class="post-list" style="list-style:none;padding-left:0;">
+<div class="posts">
   {% for post in site.posts %}
-  <li style="margin:.5rem 0;">
-    <a href="{{ post.url }}">{{ post.title }}</a>
-    <div class="post-meta">{{ post.date | date: "%Y-%m-%d" }}</div>
-  </li>
+  <article class="post-card">
+    {% if post.image %}
+    <a class="post-thumb" href="{{ post.date | date: '%Y/%m' }}/{{ post.slug }}/"><img src="{{ post.image }}" alt=""></a>
+    {% endif %}
+    <div class="post-card-body">
+      <h2 class="post-card-title"><a href="{{ post.date | date: '%Y/%m' }}/{{ post.slug }}/">{{ post.title }}</a></h2>
+      <div class="post-date">{{ post.date | date: "%Y-%m-%d" }}</div>
+      {% if post.description %}<p class="post-desc">{{ post.description }}</p>{% endif %}
+    </div>
+  </article>
   {% endfor %}
-</ul>
+</div>

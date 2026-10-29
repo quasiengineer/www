@@ -3,6 +3,8 @@ title: "Calculating Pi digits on first Intel microprocessor (intel 4004)"
 date: 2022-04-06 09:16:23
 slug: calculating-pi-digits-on-first-intel-microprocessor-intel-4004
 layout: post
+image: images/2022/04/testing_cropped.jpg
+description: "One day I thought about the performance gap between the first Intel processor and modern machines, and decided to research the subject in practice."
 ---
 
 # Introduction
