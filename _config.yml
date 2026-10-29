@@ -1,0 +1,28 @@
+title: mark.engineer
+description: Engineering notes - reverse engineering, embedded, CPU history
+baseurl: ""
+url: "https://mark.engineer"
+
+markdown: kramdown
+kramdown:
+  input: GFM
+  syntax_highlighter: rouge
+
+# Ensure posts whose date is (or was) in the future still build and render.
+future: true
+
+defaults:
+  - scope:
+      path: ""
+      type: "posts"
+    values:
+      layout: "post"
+      # Reproduces the old WordPress /YYYY/MM/slug/ URLs exactly.
+      permalink: "/:year/:month/:slug/"
+
+collections: []
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - mathdiff_*.md
