@@ -23,7 +23,7 @@ I enjoy poking around with old processors, so there was no way I was going to pa
 
 The processor (a.k.a. GDP, general data processor) came to me as part of an iSBC 432/100 board. It's a single board computer with a Multibus interface, intended for use with the Intel Intellec MDS. But of course, I wanted much more control over the processor's signals and a friendlier interface to work with. So I did what I usually do - designed a simple board with an FPGA and SRAM on board, which would cover everything the processor needs.
 
-<figure class="wp-block-image"><img alt="my design of SBC" class="aligncenter size-full wp-image-179" height="1857" src="../../../images/2026/05/01.png" width="1943"/></figure>
+![my design of SBC](../../../images/2026/05/01.png)
 
 Besides power, I needed to take care of signal level translation (a lot of chips back then ran on 5V). And that's pretty much it - the board is quite simple and routed on just 2 layers.
 
@@ -33,7 +33,7 @@ The second feature of the board is sharing a single connector for both flashing 
 
 To bring the ft232h back into UART mode after it's been used to flash the chip, all you need to do is restart the kernel module:
 
-```
+```bash
 sudo modprobe -r ftdi_sio
 sudo modprobe ftdi_sio
 ```
@@ -44,19 +44,19 @@ For the FPGA I went with a Lattice iCE40HX, mainly because of the open-source to
 
 For memory I chose a synchronous parallel SRAM rated at 250MHz (access time was specified at 2.6ns). I wasn't able to hit the maximum clock speed here (even though the same combination worked at 250MHz in another project), but 125MHz turned out to be more than enough to respond to the processor within a single cycle (without introducing extra wait states), so I didn't bother hunting for the right timings to push it higher.
 
-<figure class="wp-block-image"><img alt="debugging bus transactions" class="aligncenter size-full wp-image-180" height="1920" src="../../../images/2026/05/02-scaled.jpg" width="2560"/></figure>
+![debugging bus transactions](../../../images/2026/05/02-scaled.jpg)
 
 In my design the FPGA acted as the memory controller (bus slave), clock generator for the iAPX 432 (it needs 3 clock signals), and communicated with the control software running on the PC. For debugging purposes I wanted a log of all memory accesses from the GDP, to study the logic of its operation.
 
 On the Verilog side, the only real problem was trying to get the SRAM running at 250MHz. Yosys (the synthesis tool) kept inserting SB_DFFE elements (D flip-flops with a Clock Enable input) that completely blew the timing budget (and at 250MHz that budget isn't very generous). In the end I put together a clean module that synthesized successfully and even worked - at lower frequencies - but unfortunately not at 250MHz in the current topology.
 
-<figure class="wp-block-image"><img alt="bus read timings" class="aligncenter size-full wp-image-181" height="1407" src="../../../images/2026/05/03.png" width="2130"/></figure>
+![bus read timings](../../../images/2026/05/03.png)
 
 The bus has a pretty straightforward interface. The only thing worth mentioning is that at almost any moment a signal can arrive indicating that someone has initiated an IPC message (inter-processor communication).
 
 The request packet from the bus master (GDP) is 32 bits - 24 bits of address and 8 bits describing what the processor wants.
 
-<figure class="wp-block-image"><img alt="specification field for bus operation" class="aligncenter size-full wp-image-182" height="1152" src="../../../images/2026/05/04.png" width="2130"/></figure>
+![specification field for bus operation](../../../images/2026/05/04.png)
 
 The most obvious field is the operation type - read or write. The length is self-explanatory too. The modifiers are mostly informational and don't affect the behavior of my memory controller. The Access bit is a bit more interesting - the 432 operates with two address spaces: regular device memory and external registers for inter-processor communication (that's where things like the device ID live). Since we have no Interface Processor (another processor from 432 family to manage communications between 432 system and more classic environment) in our system, we'll mostly be using just the regular memory space.
 
@@ -286,7 +286,7 @@ From there it starts fetching the addresses of objects specific to that particul
 
 Here's a rough visualization of the object hierarchy that makes up the minimal set needed to run our code.
 
-<figure class="wp-block-image"><img alt="object graph, required to run any user code" class="aligncenter size-full wp-image-183" height="1485" src="../../../images/2026/05/05-scaled.png" width="2560"/></figure>
+![object graph, required to run any user code](../../../images/2026/05/05-scaled.png)
 
 Here is a code that builds necessary objects:
 
@@ -336,7 +336,7 @@ Rather than walk through every single memory access, I'll take a high-level appr
 
 First, let's talk about how object pointer translation to physical addresses works. Every pointer consists of two parts - an object table index and an index of the object within that table. So to compute a physical address, the processor first has to find the table's address (by reading the central directory, which holds the addresses of the individual tables), and only then reads the descriptor from that table, which contains the physical address.
 
-<figure class="wp-block-image"><img alt="two-level pointers" class="aligncenter size-full wp-image-185" height="1027" src="../../../images/2026/05/06.png" width="1474"/></figure>
+![two-level pointers](../../../images/2026/05/06.png)
 
 Why so complex? Because several features needed to be implemented:
 
@@ -351,7 +351,7 @@ Not all, but many objects can be locked - either by hardware or programmatically
 
 This mechanism is used not only for passing messages between different processes running on the GDP, but also by the scheduler itself. There's a set of processors and a set of processes. The scheduler is responsible for finding a process to run on a given processor. Message queues are used for this. Processors act as consumers, processes are the messages, and various sources - both internal and external - can publish messages to the queue.
 
-<figure class="wp-block-image"><img alt="queues and how they are used for process scheduling" class="aligncenter size-full wp-image-186" height="1069" src="../../../images/2026/05/07.png" width="1402"/></figure>
+![queues and how they are used for process scheduling](../../../images/2026/05/07.png)
 
 There are actually several such queues (just like in a modern Linux kernel, but in hardware) - for normal tasks, reconfiguration tasks, urgent processes, and diagnostic ones. There's even a queue for sleeping processes that are supposed to wake up at a specific time (the scheduler just moves them back into the normal process queue). And the queue can be either FIFO or priority-based. I'll be honest - I didn't experiment much in this area. With only single process running on single processor in my system, a lot of this I know only in theory rather than from hands-on experience. The one thing I did bump into was the scheduler trying to kick in after the process's time quantum expired, which I didn't want. I had to cheat by running the processor's tick counter clock at a very low frequency - the iAPX 43202 needs a separate clock signal for its internal purposes, which can be arbitrary and is used purely by the scheduler.
 
@@ -361,7 +361,7 @@ To sum up: to run a user program you need to prepare an initial directory contai
 
 A process's executable code is spread across several Context objects. Think of them as functions - or more accurately, procedures. A context is made up of code segments (Instruction objects) and 4 lists of data segments (those lists are called "entry access segments", EAS). Code can only access variables that live in segments defined in the EASes. This is how isolation is achieved - to access data from another context, you have to call the appropriate instruction that imports an EAS from that context (assuming the rights allow it, of course).
 
-<figure class="wp-block-image"><img alt="context and its entry access segments" class="aligncenter size-full wp-image-187" height="721" src="../../../images/2026/05/08.png" width="1201"/></figure>
+![context and its entry access segments](../../../images/2026/05/08.png)
 
 Calling a procedure (context) is an expensive operation. The iAPX 432 needs to prepare a bunch of objects describing the context (not just the corresponding data and access segments, but also the stack segment, for example), which takes around 20-30 memory accesses. This is, incidentally, one of the bottlenecks in Ada programs written for this system. The compiler distributed code quite suboptimally - the ISA has instructions for transferring control to code residing inside a context, so it wasn't always sensible to create a new context and pay the heavy price of a subroutine call.
 
@@ -375,7 +375,7 @@ The processor supports various operand types - both regular integers (up to 32 b
 
 The machine code format doesn't support encoding immediate values, which means most operands are references to values in memory. So how does variable addressing work? It's not simple, unfortunately - every reference consists of two parts: a selector for the data segment containing the variable, and an offset within that segment. In its simplest form, the selector is encoded as an EAS index in the context (one of the 4) and an index of the pointer to the target segment. So even the most trivial use of a constant in code turns into multiple memory accesses. "Efficiency". There's also indirect segment addressing - where we take a selector from the machine code, compute the address of a memory cell, which in turn contains another selector that finally points to the segment holding our variable.
 
-<figure class="wp-block-image"><img alt="overcomplicated access to variables" class="aligncenter size-full wp-image-188" height="883" src="../../../images/2026/05/09.png" width="1057"/></figure>
+![overcomplicated access to variables](../../../images/2026/05/09.png)
 
 The variable's offset within the data segment can also be more complex than just a number. A basic example - accessing an array element by an index that is itself a variable. That's supported.
 
@@ -416,7 +416,7 @@ I introduced the pseudo-variable $data specifically to optimize code size. Addre
 
 You'll also notice that a conditional branch takes 2 instructions - first we compare the variable to zero and write the comparison result into another variable (in this case the stack, specifically the top-of-stack register), then we branch based on the value of that result.
 
-<figure class="wp-block-image"><img alt="successful hello world" class="aligncenter size-full wp-image-189" height="653" src="../../../images/2026/05/10.png" width="1467"/></figure>
+![successful hello world](../../../images/2026/05/10.png)
 
 `BRANCH_TRUE msgIdx sendTwoChars` would not work because `BRANCH_TRUE` operates on 8-bit values and `msgIdx` is 16 bits. It's not that the iAPX 432 checks the width - it's just basic arithmetic: casting a 16-bit value to 8-bit drops information and breaks the logic. We definitely don't want an early exit at `msgIdx = 0x100` :)
 
@@ -532,7 +532,7 @@ Again, the listing shouldn't raise too many questions, especially with the manua
 
 ## Benchmarks and conclusions
 
-<figure class="wp-block-image"><img alt="comparision table with other CPUs" class="aligncenter size-full wp-image-190" height="1502" src="../../../images/2026/05/11-scaled.png" width="2560"/></figure>
+![comparision table with other CPUs](../../../images/2026/05/11-scaled.png)
 
 At this point, the iAPX 432 has taken first place in my performance chart. It even turned out to be faster than the Intel 8080, which was computing Pi using the considerably faster and more sophisticated Chudnovsky algorithm.
 
@@ -546,14 +546,14 @@ All necessary stuff to replicate my work is hosted in my [github repo](https://g
 
 You also can find more information about iAPX 432 in my youtube videos (they are a bit more technical and dive deeper than this article):
 
-<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">
-<div class="wp-block-embed__wrapper"><iframe allowfullscreen="allowfullscreen" frameborder="0" height="563" src="https://www.youtube.com/embed/krHs7h7xZIY?feature=oembed" width="1000"></iframe></div>
+<figure>
+<div><iframe allowfullscreen frameborder="0" height="563" src="https://www.youtube.com/embed/krHs7h7xZIY?feature=oembed" width="1000"></iframe></div>
 </figure>
 
-<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">
-<div class="wp-block-embed__wrapper"><iframe allowfullscreen="allowfullscreen" frameborder="0" height="563" src="https://www.youtube.com/embed/38u6GqKjusc?feature=oembed" width="1000"></iframe></div>
+<figure>
+<div><iframe allowfullscreen frameborder="0" height="563" src="https://www.youtube.com/embed/38u6GqKjusc?feature=oembed" width="1000"></iframe></div>
 </figure>
 
-<figure class="wp-block-embed is-type-video is-provider-youtube wp-block-embed-youtube wp-embed-aspect-16-9 wp-has-aspect-ratio">
-<div class="wp-block-embed__wrapper"><iframe allowfullscreen="allowfullscreen" frameborder="0" height="563" src="https://www.youtube.com/embed/nyYMQzDJiHg?feature=oembed" width="1000"></iframe></div>
+<figure>
+<div><iframe allowfullscreen frameborder="0" height="563" src="https://www.youtube.com/embed/nyYMQzDJiHg?feature=oembed" width="1000"></iframe></div>
 </figure>
